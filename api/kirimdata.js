@@ -18,7 +18,7 @@ const db = admin.firestore();
 // Fungsi untuk mengurangi 7 jam dari waktu lokal
 function getAdjustedTimestamp() {
   const now = new Date();
-  now.setHours(now.getHours() - 7);
+  now.setHours(now.getHours());
   return now;
 }
 
