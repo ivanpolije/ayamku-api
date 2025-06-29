@@ -2,24 +2,24 @@ const express = require("express");
 const admin = require("firebase-admin");
 const cors = require("cors");
 
-// Konfigurasi express
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Load konfigurasi Firebase dari environment variable
+// Ganti path ini dengan path file serviceAccountKey.json kamu
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 
-// Inisialisasi Firebase
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
 const db = admin.firestore();
 
-// Fungsi untuk mendapatkan waktu saat ini dalam WIB
-function getWaktuIndonesia() {
-  return new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
+// Fungsi untuk mengurangi 7 jam dari waktu lokal
+function getAdjustedTimestamp() {
+  const now = new Date();
+  now.setHours(now.getHours() - 7);
+  return now;
 }
 
 // Endpoint untuk kirim data sensor ke Firestore
@@ -36,14 +36,11 @@ app.post("/api/kirimdata", async (req, res) => {
       });
     }
 
-    const waktuWIB = getWaktuIndonesia();
-
     await db.collection("history").add({
       suhu: Number(suhu),
       kelembaban: Number(kelembaban),
       mq135: Number(mq135),
-      timestamp: waktuWIB,
-      waktu_string: waktuWIB.toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })
+      timestamp: getAdjustedTimestamp()
     });
 
     return res.status(200).json({
@@ -59,7 +56,7 @@ app.post("/api/kirimdata", async (req, res) => {
   }
 });
 
-// Jalankan server
+// Port default
 const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
