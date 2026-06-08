@@ -40,7 +40,7 @@ app.post("/api/kirimdata", async (req, res) => {
       suhu: Number(suhu),
       kelembaban: Number(kelembaban),
       mq135: Number(mq135),
-      updatedAt: waktu.toISOString()
+      updatedAt: waktu.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
     });
 
     // Simpan ke history
@@ -48,7 +48,7 @@ app.post("/api/kirimdata", async (req, res) => {
       suhu: Number(suhu),
       kelembaban: Number(kelembaban),
       mq135: Number(mq135),
-      timestamp: waktu.toISOString()
+      timestamp: waktu.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
     });
 
     return res.status(200).json({
