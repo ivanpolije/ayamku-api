@@ -14,13 +14,24 @@ admin.initializeApp({
 
 const db = admin.database();
 
-function getWaktuIndonesia() {
+// Fungsi waktu WIB (UTC+7) dalam format string
+function getWaktuWIB() {
   const now = new Date();
-  const wibOffset = 7 * 60;
-  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-  return new Date(utc + wibOffset * 60000);
+  const wibOffset = 7 * 60 * 60 * 1000; // 7 jam dalam ms
+  const wib = new Date(now.getTime() + wibOffset);
+
+  const year = wib.getUTCFullYear();
+  const month = String(wib.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(wib.getUTCDate()).padStart(2, '0');
+  const hour = String(wib.getUTCHours()).padStart(2, '0');
+  const minute = String(wib.getUTCMinutes()).padStart(2, '0');
+  const second = String(wib.getUTCSeconds()).padStart(2, '0');
+
+  // Format: 2026-06-08T14:37:00.000Z tapi sudah dalam WIB
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}.000Z`;
 }
 
+// Endpoint kirim data sensor
 app.post("/api/kirimdata", async (req, res) => {
   try {
     console.log("Data diterima:", req.body);
@@ -33,14 +44,14 @@ app.post("/api/kirimdata", async (req, res) => {
       });
     }
 
-    const waktu = getWaktuIndonesia();
+    const waktuWIB = getWaktuWIB();
 
-    // Update data realtime (Flutter baca ini)
+    // Update data realtime
     await db.ref("sensor").set({
       suhu: Number(suhu),
       kelembaban: Number(kelembaban),
       mq135: Number(mq135),
-      updatedAt: waktu.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
+      updatedAt: waktuWIB
     });
 
     // Simpan ke history
@@ -48,7 +59,7 @@ app.post("/api/kirimdata", async (req, res) => {
       suhu: Number(suhu),
       kelembaban: Number(kelembaban),
       mq135: Number(mq135),
-      timestamp: waktu.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
+      timestamp: waktuWIB
     });
 
     return res.status(200).json({
