@@ -27,11 +27,11 @@ const db = admin.database();
 // =============================================
 // MQTT Topics
 // =============================================
-const TOPIC_SENSOR        = "ayamku/sensor";         // ESP32 publish
-const TOPIC_KONTROL_FAN   = "ayamku/kontrol/fan";    // Backend publish → ESP32
-const TOPIC_KONTROL_LAMP  = "ayamku/kontrol/lamp";   // Backend publish → ESP32
-const TOPIC_THRESHOLD     = "ayamku/threshold";      // Backend publish → ESP32
-const TOPIC_JADWAL        = "ayamku/jadwal";         // Backend publish → ESP32
+const TOPIC_SENSOR        = "ayamku-1/sensor";
+const TOPIC_KONTROL_FAN   = "ayamku-1/kontrol/fan";
+const TOPIC_KONTROL_LAMP  = "ayamku-1/kontrol/lamp";
+const TOPIC_THRESHOLD     = "ayamku-1/threshold";
+const TOPIC_JADWAL        = "ayamku-1/jadwal";
 
 // =============================================
 // Waktu WIB
