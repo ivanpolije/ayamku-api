@@ -1,89 +1,168 @@
-const admin = require("firebase-admin");
+/**
+ * AyamKu Backend - Railway
+ * 
+ * Fungsi:
+ *  - Subscribe MQTT topic ayamku/sensor → simpan ke Firebase Realtime DB + history
+ *  - Subscribe Firebase /kontrol, /threshold, /jadwal → publish balik ke ESP32 via MQTT
+ *  - HTTP endpoint GET / untuk health check
+ */
 
-// Inisialisasi Firebase Admin hanya sekali (cold start safe)
+const express      = require("express");
+const cors         = require("cors");
+const mqtt         = require("mqtt");
+const admin        = require("firebase-admin");
+
+// =============================================
+// Firebase Admin
+// =============================================
 if (!admin.apps.length) {
   const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_KEY);
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+    credential:  admin.credential.cert(serviceAccount),
     databaseURL: "https://ayamku-2c344-default-rtdb.firebaseio.com"
   });
 }
-
 const db = admin.database();
 
-// Fungsi waktu WIB (UTC+7) dalam format string
+// =============================================
+// MQTT Topics
+// =============================================
+const TOPIC_SENSOR        = "ayamku/sensor";         // ESP32 publish
+const TOPIC_KONTROL_FAN   = "ayamku/kontrol/fan";    // Backend publish → ESP32
+const TOPIC_KONTROL_LAMP  = "ayamku/kontrol/lamp";   // Backend publish → ESP32
+const TOPIC_THRESHOLD     = "ayamku/threshold";      // Backend publish → ESP32
+const TOPIC_JADWAL        = "ayamku/jadwal";         // Backend publish → ESP32
+
+// =============================================
+// Waktu WIB
+// =============================================
 function getWaktuWIB() {
   const now = new Date();
-  const wibOffset = 7 * 60 * 60 * 1000;
-  const wib = new Date(now.getTime() + wibOffset);
-
-  const year   = wib.getUTCFullYear();
-  const month  = String(wib.getUTCMonth() + 1).padStart(2, '0');
-  const day    = String(wib.getUTCDate()).padStart(2, '0');
-  const hour   = String(wib.getUTCHours()).padStart(2, '0');
-  const minute = String(wib.getUTCMinutes()).padStart(2, '0');
-  const second = String(wib.getUTCSeconds()).padStart(2, '0');
-
-  return `${year}-${month}-${day}T${hour}:${minute}:${second}.000Z`;
+  const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${wib.getUTCFullYear()}-${pad(wib.getUTCMonth()+1)}-${pad(wib.getUTCDate())}` +
+         `T${pad(wib.getUTCHours())}:${pad(wib.getUTCMinutes())}:${pad(wib.getUTCSeconds())}.000Z`;
 }
 
-// Vercel serverless handler (tidak pakai app.listen)
-module.exports = async (req, res) => {
-  // CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+// =============================================
+// MQTT Client
+// =============================================
+const mqttClient = mqtt.connect("mqtt://broker.hivemq.com:1883", {
+  clientId: `ayamku-backend-${Math.random().toString(16).slice(2, 8)}`,
+  clean:    true,
+  reconnectPeriod: 3000,
+});
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+mqttClient.on("connect", () => {
+  console.log("[MQTT] Terhubung ke broker.hivemq.com");
 
-  // Health check
-  if (req.method === "GET") {
-    return res.status(200).json({ status: "AyamKu API running 🐔" });
+  // Subscribe topic dari ESP32
+  mqttClient.subscribe(TOPIC_SENSOR, { qos: 0 }, (err) => {
+    if (err) console.error("[MQTT] Gagal subscribe sensor:", err.message);
+    else     console.log(`[MQTT] Subscribe: ${TOPIC_SENSOR}`);
+  });
+});
+
+mqttClient.on("reconnect", () => console.log("[MQTT] Reconnecting..."));
+mqttClient.on("error",     (e) => console.error("[MQTT] Error:", e.message));
+
+// =============================================
+// Proses data sensor dari ESP32
+// =============================================
+mqttClient.on("message", async (topic, message) => {
+  if (topic !== TOPIC_SENSOR) return;
+
+  let data;
+  try {
+    data = JSON.parse(message.toString());
+  } catch (e) {
+    console.error("[MQTT] Payload bukan JSON:", message.toString());
+    return;
   }
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ success: false, message: "Method not allowed" });
+  const { suhu, kelembaban, mq135 } = data;
+  if (suhu === undefined || kelembaban === undefined || mq135 === undefined) {
+    console.warn("[MQTT] Field kurang:", data);
+    return;
   }
+
+  const waktu = getWaktuWIB();
+  console.log(`[SENSOR] Suhu:${suhu} Lemb:${kelembaban} MQ135:${mq135} @ ${waktu}`);
 
   try {
-    console.log("Data diterima:", req.body);
-    const { suhu, kelembaban, mq135 } = req.body;
-
-    if (suhu === undefined || kelembaban === undefined || mq135 === undefined) {
-      return res.status(400).json({
-        success: false,
-        message: "Field 'suhu', 'kelembaban', dan 'mq135' wajib diisi"
-      });
-    }
-
-    const waktuWIB = getWaktuWIB();
-
-    // Update node sensor (data live untuk Flutter)
+    // Update node /sensor (data live untuk Flutter)
     await db.ref("sensor").set({
-      suhu:      Number(suhu),
+      suhu:       Number(suhu),
       kelembaban: Number(kelembaban),
-      mq135:     Number(mq135),
-      updatedAt: waktuWIB
+      mq135:      Number(mq135),
+      updatedAt:  waktu
     });
 
-    // Push ke history (riwayat data)
+    // Push ke /history (riwayat)
     await db.ref("history").push({
-      suhu:      Number(suhu),
+      suhu:       Number(suhu),
       kelembaban: Number(kelembaban),
-      mq135:     Number(mq135),
-      timestamp: waktuWIB
+      mq135:      Number(mq135),
+      timestamp:  waktu
     });
 
-    return res.status(200).json({
-      success: true,
-      message: "Data berhasil dikirim ke Realtime Database"
-    });
-
-  } catch (error) {
-    console.error("Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    console.log("[FB] Data disimpan ke Firebase");
+  } catch (e) {
+    console.error("[FB] Gagal simpan:", e.message);
   }
-};
+});
+
+// =============================================
+// Listen perubahan Firebase → publish ke ESP32
+// Saat user ubah kontrol/threshold/jadwal dari app Flutter,
+// backend langsung forward ke ESP32 via MQTT
+// =============================================
+
+// Kontrol relay
+db.ref("kontrol").on("value", (snap) => {
+  const data = snap.val();
+  if (!data) return;
+  mqttClient.publish(TOPIC_KONTROL_FAN,  String(data.fan  === true), { qos: 0, retain: true });
+  mqttClient.publish(TOPIC_KONTROL_LAMP, String(data.lamp === true), { qos: 0, retain: true });
+  console.log(`[FB→MQTT] kontrol fan:${data.fan} lamp:${data.lamp}`);
+});
+
+// Threshold
+db.ref("threshold").on("value", (snap) => {
+  const data = snap.val();
+  if (!data) return;
+  mqttClient.publish(TOPIC_THRESHOLD, JSON.stringify(data), { qos: 0, retain: true });
+  console.log("[FB→MQTT] threshold:", data);
+});
+
+// Jadwal pakan
+db.ref("jadwal").on("value", (snap) => {
+  const data = snap.val();
+  if (!data) return;
+  mqttClient.publish(TOPIC_JADWAL, JSON.stringify(data), { qos: 0, retain: true });
+  console.log("[FB→MQTT] jadwal:", data);
+});
+
+// =============================================
+// Express HTTP (health check + Railway keep-alive)
+// =============================================
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+app.get("/", (req, res) => {
+  res.json({
+    status:  "AyamKu API running 🐔",
+    mqtt:    mqttClient.connected ? "connected" : "disconnected",
+    broker:  "broker.hivemq.com:1883",
+    topics: {
+      subscribe: [TOPIC_SENSOR],
+      publish:   [TOPIC_KONTROL_FAN, TOPIC_KONTROL_LAMP, TOPIC_THRESHOLD, TOPIC_JADWAL]
+    }
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});

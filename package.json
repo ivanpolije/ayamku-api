@@ -1,17 +1,19 @@
 {
-  "name": "ecomonitor-api",
+  "name": "ayamku-api",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "AyamKu Backend - MQTT Bridge to Firebase",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "firebase-admin": "^13.4.0"
+    "firebase-admin": "^13.4.0",
+    "mqtt": "^5.10.1"
   }
 }
