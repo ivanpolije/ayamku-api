@@ -1,38 +1,50 @@
-const express = require("express");
 const admin = require("firebase-admin");
-const cors = require("cors");
-const app = express();
-app.use(cors());
-app.use(express.json());
 
-const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_KEY);
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://ayamku-2c344-default-rtdb.firebaseio.com"
-});
+// Inisialisasi Firebase Admin hanya sekali (cold start safe)
+if (!admin.apps.length) {
+  const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_KEY);
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL: "https://ayamku-2c344-default-rtdb.firebaseio.com"
+  });
+}
 
 const db = admin.database();
 
 // Fungsi waktu WIB (UTC+7) dalam format string
 function getWaktuWIB() {
   const now = new Date();
-  const wibOffset = 7 * 60 * 60 * 1000; // 7 jam dalam ms
+  const wibOffset = 7 * 60 * 60 * 1000;
   const wib = new Date(now.getTime() + wibOffset);
 
-  const year = wib.getUTCFullYear();
-  const month = String(wib.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(wib.getUTCDate()).padStart(2, '0');
-  const hour = String(wib.getUTCHours()).padStart(2, '0');
+  const year   = wib.getUTCFullYear();
+  const month  = String(wib.getUTCMonth() + 1).padStart(2, '0');
+  const day    = String(wib.getUTCDate()).padStart(2, '0');
+  const hour   = String(wib.getUTCHours()).padStart(2, '0');
   const minute = String(wib.getUTCMinutes()).padStart(2, '0');
   const second = String(wib.getUTCSeconds()).padStart(2, '0');
 
-  // Format: 2026-06-08T14:37:00.000Z tapi sudah dalam WIB
   return `${year}-${month}-${day}T${hour}:${minute}:${second}.000Z`;
 }
 
-// Endpoint kirim data sensor
-app.post("/api/kirimdata", async (req, res) => {
+// Vercel serverless handler (tidak pakai app.listen)
+module.exports = async (req, res) => {
+  // CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") return res.status(200).end();
+
+  // Health check
+  if (req.method === "GET") {
+    return res.status(200).json({ status: "AyamKu API running 🐔" });
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, message: "Method not allowed" });
+  }
+
   try {
     console.log("Data diterima:", req.body);
     const { suhu, kelembaban, mq135 } = req.body;
@@ -46,19 +58,19 @@ app.post("/api/kirimdata", async (req, res) => {
 
     const waktuWIB = getWaktuWIB();
 
-    // Update data realtime
+    // Update node sensor (data live untuk Flutter)
     await db.ref("sensor").set({
-      suhu: Number(suhu),
+      suhu:      Number(suhu),
       kelembaban: Number(kelembaban),
-      mq135: Number(mq135),
+      mq135:     Number(mq135),
       updatedAt: waktuWIB
     });
 
-    // Simpan ke history
+    // Push ke history (riwayat data)
     await db.ref("history").push({
-      suhu: Number(suhu),
+      suhu:      Number(suhu),
       kelembaban: Number(kelembaban),
-      mq135: Number(mq135),
+      mq135:     Number(mq135),
       timestamp: waktuWIB
     });
 
@@ -69,14 +81,9 @@ app.post("/api/kirimdata", async (req, res) => {
 
   } catch (error) {
     console.error("Error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message
     });
   }
-});
-
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+};
