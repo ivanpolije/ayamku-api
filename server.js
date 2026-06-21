@@ -16,11 +16,28 @@ const admin        = require("firebase-admin");
 // Firebase Admin
 // =============================================
 if (!admin.apps.length) {
-  const serviceAccount = JSON.parse(process.env.SERVICE_ACCOUNT_KEY);
+  const rawKey = process.env.SERVICE_ACCOUNT_KEY;
+
+  if (!rawKey) {
+    console.error("[ERROR] SERVICE_ACCOUNT_KEY tidak ditemukan di environment variables!");
+    console.error("[INFO] Set variable SERVICE_ACCOUNT_KEY di Railway dashboard");
+    process.exit(1);
+  }
+
+  let serviceAccount;
+  try {
+    serviceAccount = JSON.parse(rawKey);
+  } catch (e) {
+    console.error("[ERROR] SERVICE_ACCOUNT_KEY bukan JSON valid:", e.message);
+    console.error("[INFO] Pastikan value adalah JSON satu baris tanpa line break");
+    process.exit(1);
+  }
+
   admin.initializeApp({
     credential:  admin.credential.cert(serviceAccount),
     databaseURL: "https://ayamku-2c344-default-rtdb.firebaseio.com"
   });
+  console.log("[FB] Firebase Admin initialized, project:", serviceAccount.project_id);
 }
 const db = admin.database();
 
