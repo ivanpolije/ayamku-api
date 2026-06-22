@@ -141,8 +141,8 @@ mqttClient.on("message", async (topic, message) => {
 db.ref("kontrol").on("value", (snap) => {
   const data = snap.val();
   if (!data) return;
-  mqttClient.publish(TOPIC_KONTROL_FAN,  String(data.fan  === true), { qos: 0, retain: true });
-  mqttClient.publish(TOPIC_KONTROL_LAMP, String(data.lamp === true), { qos: 0, retain: true });
+  mqttClient.publish(TOPIC_KONTROL_FAN,  String(data.fan  === true), { qos: 0, retain: false });
+  mqttClient.publish(TOPIC_KONTROL_LAMP, String(data.lamp === true), { qos: 0, retain: false });
   console.log(`[FB→MQTT] kontrol fan:${data.fan} lamp:${data.lamp}`);
 });
 
