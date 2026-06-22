@@ -137,13 +137,21 @@ mqttClient.on("message", async (topic, message) => {
 // backend langsung forward ke ESP32 via MQTT
 // =============================================
 
-// Kontrol relay
-db.ref("kontrol").on("value", (snap) => {
-  const data = snap.val();
-  if (!data) return;
-  mqttClient.publish(TOPIC_KONTROL_FAN,  String(data.fan  === true), { qos: 0, retain: false });
-  mqttClient.publish(TOPIC_KONTROL_LAMP, String(data.lamp === true), { qos: 0, retain: false });
-  console.log(`[FB→MQTT] kontrol fan:${data.fan} lamp:${data.lamp}`);
+// Kontrol relay — listen per child supaya hanya publish yang berubah
+db.ref("kontrol/fan").on("value", (snap) => {
+  const val = snap.val();
+  if (val === null) return;
+  const msg = String(val === true);
+  mqttClient.publish(TOPIC_KONTROL_FAN, msg, { qos: 0, retain: false });
+  console.log(`[FB→MQTT] kontrol/fan → ${msg}`);
+});
+
+db.ref("kontrol/lamp").on("value", (snap) => {
+  const val = snap.val();
+  if (val === null) return;
+  const msg = String(val === true);
+  mqttClient.publish(TOPIC_KONTROL_LAMP, msg, { qos: 0, retain: false });
+  console.log(`[FB→MQTT] kontrol/lamp → ${msg}`);
 });
 
 // Threshold
