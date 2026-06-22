@@ -15,11 +15,13 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
-// Fungsi untuk mengurangi 7 jam dari waktu lokal
+// Fungsi untuk mendapatkan waktu WIB (UTC+7)
 function getAdjustedTimestamp() {
   const now = new Date();
-  now.setHours(now.getHours());
-  return now;
+  const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${wib.getUTCFullYear()}-${pad(wib.getUTCMonth()+1)}-${pad(wib.getUTCDate())}` +
+         `T${pad(wib.getUTCHours())}:${pad(wib.getUTCMinutes())}:${pad(wib.getUTCSeconds())}.000+07:00`;
 }
 
 // Endpoint untuk kirim data sensor ke Firestore

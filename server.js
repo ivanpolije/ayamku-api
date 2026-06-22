@@ -57,8 +57,10 @@ function getWaktuWIB() {
   const now = new Date();
   const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
   const pad = (n) => String(n).padStart(2, "0");
+  // Format tanpa suffix Z supaya tidak dianggap UTC oleh parser lain
+  // Contoh hasil: "2025-06-22T14:30:00.000+07:00"
   return `${wib.getUTCFullYear()}-${pad(wib.getUTCMonth()+1)}-${pad(wib.getUTCDate())}` +
-         `T${pad(wib.getUTCHours())}:${pad(wib.getUTCMinutes())}:${pad(wib.getUTCSeconds())}.000Z`;
+         `T${pad(wib.getUTCHours())}:${pad(wib.getUTCMinutes())}:${pad(wib.getUTCSeconds())}.000+07:00`;
 }
 
 // =============================================
